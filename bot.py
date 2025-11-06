@@ -1,5 +1,8 @@
 import os
 import sys
+import urllib.parse
+import re
+import asyncio
 
 from loguru import logger
 from pipecat.frames.frames import LLMMessagesFrame, EndFrame
@@ -21,6 +24,7 @@ from pipecat.transports.network.fastapi_websocket import (
 from pipecat.serializers.twilio import TwilioFrameSerializer
 
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from email_service import get_email_service
 
 logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
@@ -45,6 +49,9 @@ async def main(websocket_client, stream_sid):
     deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
     openai_api_key = os.environ.get("OPENAI_API_KEY")
     elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    
+    email_service = get_email_service()
 
     stt = DeepgramSTTService(
         api_key=deepgram_api_key,
@@ -53,6 +60,46 @@ async def main(websocket_client, stream_sid):
             language="multi"
         )
     )
+
+    email_sent = False
+    
+    async def check_and_send_email():
+        nonlocal email_sent
+        if email_sent:
+            return
+        
+        messages = context.get_messages()
+        all_text = " ".join([m.get("content", "") for m in messages])
+        user_text = " ".join([m["content"] for m in messages if m.get("role") == "user"])
+        
+        # Extract email
+        email_match = re.search(r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', all_text)
+        # Extract zip code (5 digits)
+        zip_match = re.search(r'\b\d{5}\b', all_text)
+        # Extract name
+        name_match = None
+        name_patterns = [
+            r"(?:my name is|i'm|i am|this is|it's|it is)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})",
+            r"(?:name is|called)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})",
+        ]
+        for pattern in name_patterns:
+            name_match = re.search(pattern, user_text, re.IGNORECASE)
+            if name_match:
+                break
+        if not name_match:
+            words = re.findall(r'\b[A-Z][a-z]+\b', user_text)
+            if len(words) >= 2:
+                name_match = type('obj', (object,), {'group': lambda x: ' '.join(words[:2])})()
+        
+        if email_match and zip_match and name_match:
+            name = name_match.group(1).strip() if hasattr(name_match, 'group') else name_match
+            email = email_match.group(0)
+            zip_code = zip_match.group(0)
+            
+            link = f"{base_url}/loan-application?legal_name={urllib.parse.quote(name)}&email={urllib.parse.quote(email)}&zip_code={urllib.parse.quote(zip_code)}"
+            success = await email_service.send_application_link(email, name, link)
+            email_sent = True
+            logger.info(f"Email sent to {email} for {name}, zip {zip_code}, Success: {success}")
 
     llm = OpenAILLMService(
         name="LLM",
@@ -77,11 +124,11 @@ Your workflow:
 2. Consent checkpoint: Explain that you'll use a soft credit inquiry that does not impact their credit score. Get their explicit consent before proceeding.
 3. Collect basics: Gather the following information IN THIS ORDER:
    - Full name (legal name)
-   - Mobile number (where you will send the secure link)
+   - Email address (where you will send the secure link)
    - Zip code
-4. Link handoff: AFTER collecting all three pieces of information (full name, mobile number, and zip code), confirm you've sent the secure link to their mobile number and offer to stay on the line if they need help.
+4. Link handoff: AFTER collecting all three pieces of information (full name, email, and zip code), confirm that you've sent the secure link to their email and offer to stay on the line if they need help.
 
-IMPORTANT: Only mention sending the link AFTER you have collected the full name, mobile number, and zip code. Do not mention the link during the opening or consent phases.
+IMPORTANT: Only mention sending the link AFTER you have collected the full name, email, and zip code. Do not mention the link during the opening or consent phases.
 
 Guidelines:
 - Be professional, warm, and helpful
@@ -91,7 +138,7 @@ Guidelines:
 - Keep the conversation focused on the pre-approval process
 - Be concise but thorough
 - Use natural, conversational language
-- Wait until you have all three pieces of information before sending the link""",
+- After collecting all three pieces of information, confirm that the link has been sent to their email""",
         },
     ]
     print('here', flush=True)
@@ -109,8 +156,16 @@ Guidelines:
             context_aggregator.assistant(),
         ]
     )
-
+    
     task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
+    
+    # Start background task to check and send email periodically
+    async def email_check_task():
+        while True:
+            await asyncio.sleep(2)  # Check every 2 seconds
+            await check_and_send_email()
+    
+    email_task = asyncio.create_task(email_check_task())
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
@@ -124,6 +179,7 @@ Guidelines:
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
+        email_task.cancel()
         await task.queue_frames([EndFrame()])
 
     runner = PipelineRunner(handle_sigint=False)
