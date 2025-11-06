@@ -61,51 +61,12 @@ async def main(websocket_client, stream_sid):
         )
     )
 
-    email_sent = False
-    
-    async def check_and_send_email():
-        nonlocal email_sent
-        if email_sent:
-            return
-        
-        messages = context.get_messages()
-        all_text = " ".join([m.get("content", "") for m in messages])
-        user_text = " ".join([m["content"] for m in messages if m.get("role") == "user"])
-        
-        # Extract email
-        email_match = re.search(r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', all_text)
-        # Extract zip code (5 digits)
-        zip_match = re.search(r'\b\d{5}\b', all_text)
-        # Extract name
-        name_match = None
-        name_patterns = [
-            r"(?:my name is|i'm|i am|this is|it's|it is)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})",
-            r"(?:name is|called)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})",
-        ]
-        for pattern in name_patterns:
-            name_match = re.search(pattern, user_text, re.IGNORECASE)
-            if name_match:
-                break
-        if not name_match:
-            words = re.findall(r'\b[A-Z][a-z]+\b', user_text)
-            if len(words) >= 2:
-                name_match = type('obj', (object,), {'group': lambda x: ' '.join(words[:2])})()
-        
-        if email_match and zip_match and name_match:
-            name = name_match.group(1).strip() if hasattr(name_match, 'group') else name_match
-            email = email_match.group(0)
-            zip_code = zip_match.group(0)
-            
-            link = f"{base_url}/loan-application?legal_name={urllib.parse.quote(name)}&email={urllib.parse.quote(email)}&zip_code={urllib.parse.quote(zip_code)}"
-            success = await email_service.send_application_link(email, name, link)
-            email_sent = True
-            logger.info(f"Email sent to {email} for {name}, zip {zip_code}, Success: {success}")
-
     llm = OpenAILLMService(
         name="LLM",
         api_key=openai_api_key,
         model="gpt-4o",
     )
+    
 
     tts = ElevenLabsTTSService(
         api_key=elevenlabs_api_key,
@@ -144,6 +105,28 @@ Guidelines:
     print('here', flush=True)
     context = OpenAILLMContext(messages=messages)
     context_aggregator = llm.create_context_aggregator(context)
+    
+    # Store collected data
+    collected_data = {"name": None, "email": None, "zip_code": None}
+    
+    # Monitor messages and send email when all data is collected
+    email_sent_flag = False
+    
+    async def check_and_send_email():
+        nonlocal email_sent_flag
+        if email_sent_flag:
+            return
+        
+        if collected_data["name"] and collected_data["email"] and collected_data["zip_code"]:
+            logger.info(f"All data collected! Name: {collected_data['name']}, Email: {collected_data['email']}, Zip: {collected_data['zip_code']}")
+            link = f"{base_url}/loan-application?legal_name={urllib.parse.quote(collected_data['name'])}&email={urllib.parse.quote(collected_data['email'])}&zip_code={urllib.parse.quote(collected_data['zip_code'])}"
+            success = await email_service.send_application_link(
+                collected_data["email"], 
+                collected_data["name"], 
+                link
+            )
+            logger.info(f"Email sent to {collected_data['email']} for {collected_data['name']}, zip {collected_data['zip_code']}, Success: {success}")
+            email_sent_flag = True
 
     pipeline = Pipeline(
         [
@@ -157,18 +140,76 @@ Guidelines:
         ]
     )
     
+    # Background task to check for collected data
+    async def monitor_messages():
+        logger.info("Email monitor task started")
+        while True:
+            try:
+                await asyncio.sleep(2)
+                messages = context.get_messages()
+                if not messages:
+                    continue
+                    
+                all_messages_text = " ".join([m.get("content", "") for m in messages])
+                user_messages = [m["content"] for m in messages if m.get("role") == "user"]
+                user_text = " ".join(user_messages)
+                
+                # Extract email from all messages (might be in assistant confirmation)
+                email_match = re.search(r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', all_messages_text)
+                
+                # Extract zip code - look for 5 digits (LLM might have normalized it)
+                zip_match = re.search(r'\b\d{5}\b', all_messages_text)
+                # Also look for zip code in assistant confirmations like "that's 33141"
+                if not zip_match:
+                    zip_match = re.search(r"(?:that's|is|zip code is|zip is)\s+(\d{5})", all_messages_text, re.IGNORECASE)
+                    if zip_match:
+                        zip_match = type('obj', (object,), {'group': lambda x: zip_match.group(1)})()
+                
+                # Extract name - look in user messages for "full name is" pattern
+                name_match = None
+                name_patterns = [
+                    r"(?:my\s+)?full\s+name\s+is\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})",
+                    r"(?:my name is|i'm|i am|this is|it's|it is)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})",
+                    r"([A-Z][a-z]+\s+[A-Z][a-z]+)",  # Simple First Last pattern
+                ]
+                for pattern in name_patterns:
+                    name_match = re.search(pattern, user_text, re.IGNORECASE)
+                    if name_match:
+                        break
+                
+                # Update collected data
+                if email_match and not collected_data["email"]:
+                    collected_data["email"] = email_match.group(0)
+                    logger.info(f"Extracted email: {collected_data['email']}")
+                
+                if zip_match and not collected_data["zip_code"]:
+                    collected_data["zip_code"] = zip_match.group(0)
+                    logger.info(f"Extracted zip code: {collected_data['zip_code']}")
+                
+                if name_match and not collected_data["name"]:
+                    if name_match.lastindex:
+                        collected_data["name"] = name_match.group(1).strip()
+                    else:
+                        collected_data["name"] = name_match.group(0).strip()
+                    logger.info(f"Extracted name: {collected_data['name']}")
+                
+                logger.debug(f"Current collected data: {collected_data}")
+                await check_and_send_email()
+            except Exception as e:
+                logger.error(f"Error in monitor_messages: {e}", exc_info=True)
+                await asyncio.sleep(2)
+    
     task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
     
-    # Start background task to check and send email periodically
-    async def email_check_task():
-        while True:
-            await asyncio.sleep(2)  # Check every 2 seconds
-            await check_and_send_email()
-    
-    email_task = asyncio.create_task(email_check_task())
+    monitor_task = None
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
+        nonlocal monitor_task
+        # Start monitoring task when client connects
+        monitor_task = asyncio.create_task(monitor_messages())
+        logger.info("Email monitoring task created")
+        
         # Kick off the conversation with the opening message
         opening_message = {
             "role": "system", 
@@ -179,7 +220,13 @@ Guidelines:
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
-        email_task.cancel()
+        nonlocal monitor_task
+        if monitor_task:
+            monitor_task.cancel()
+            try:
+                await monitor_task
+            except asyncio.CancelledError:
+                pass
         await task.queue_frames([EndFrame()])
 
     runner = PipelineRunner(handle_sigint=False)
