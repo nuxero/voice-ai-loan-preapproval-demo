@@ -68,8 +68,9 @@ async def websocket_endpoint(websocket: WebSocket):
     await start_data.__anext__()
     call_data = json.loads(await start_data.__anext__())
     stream_sid = call_data["start"]["streamSid"]
-    logger.info(f"Starting voice AI session with stream_sid: {stream_sid}")
-    await main(websocket, stream_sid)
+    call_sid = call_data["start"].get("callSid")
+    logger.info(f"Starting voice AI session with stream_sid: {stream_sid}, call_sid: {call_sid}")
+    await main(websocket, stream_sid, call_sid)
 
 
 @app.get("/loan-application")
