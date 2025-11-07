@@ -41,8 +41,8 @@
           "valueFrom": "${SECRETS_ARN}:MAILERSEND_API_KEY::"
         },
         {
-          "name": "MAILERSEND_FROM_EMAIL",
-          "valueFrom": "${SECRETS_ARN}:MAILERSEND_FROM_EMAIL::"
+          "name": "MAILERSEND_FROM_URL",
+          "valueFrom": "${SECRETS_ARN}:MAILERSEND_FROM_URL::"
         }
       ],
       "logConfiguration": {
