@@ -35,6 +35,14 @@
         {
           "name": "TWILIO_AUTH_TOKEN",
           "valueFrom": "${SECRETS_ARN}:TWILIO_AUTH_TOKEN::"
+        },
+        {
+          "name": "MAILERSEND_API_KEY",
+          "valueFrom": "${SECRETS_ARN}:MAILERSEND_API_KEY::"
+        },
+        {
+          "name": "MAILERSEND_FROM_EMAIL",
+          "valueFrom": "${SECRETS_ARN}:MAILERSEND_FROM_EMAIL::"
         }
       ],
       "logConfiguration": {

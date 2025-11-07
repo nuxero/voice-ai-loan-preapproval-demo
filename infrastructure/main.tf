@@ -145,6 +145,8 @@ resource "aws_secretsmanager_secret_version" "api_keys" {
     OPENAI_API_KEY      = var.openai_api_key
     TWILIO_ACCOUNT_SID  = var.twilio_account_sid
     TWILIO_AUTH_TOKEN   = var.twilio_auth_token
+    MAILERSEND_API_KEY  = var.mailersend_api_key
+    MAILERSEND_FROM_URL = var.mailersend_from_url
   })
 }
 

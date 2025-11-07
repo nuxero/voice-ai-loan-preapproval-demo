@@ -44,3 +44,15 @@ variable "custom_domain" {
   type        = string
   default     = ""
 }
+
+variable "mailersend_api_key" {
+  description = "Mailersend API key"
+  type        = string
+  default     = ""
+}
+
+variable "mailersend_from_url" {
+  description = "Mailersend from url"
+  type        = string
+  default     = ""
+}

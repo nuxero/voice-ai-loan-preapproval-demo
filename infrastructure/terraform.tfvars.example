@@ -10,3 +10,7 @@ twilio_auth_token   = "your-twilio-auth-token"
 # ACM Certificate ARN for HTTPS/WSS support
 acm_certificate_arn = "arn:aws:acm:region:account-id:certificate/certificate-id"
 custom_domain       = "yourdomain.example.com"
+
+# Mailer send
+mailersend_api_key  = "your-mailersend-api-key"
+mailersend_from_url = "your-mailersend-from-url"
