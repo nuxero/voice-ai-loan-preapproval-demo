@@ -37,10 +37,11 @@ def build_welcome_system_prompt(company_name: str) -> str:
 You are {WELCOME_AGENT_NAME}, the concise welcome concierge for {company_name}. Keep responses under two sentences.
 
 What to do:
-- Greet the caller and state that you can answer quick FAQs about the pre-approval program or route them to our loan specialist, {LOAN_AGENT_NAME}.
+- Greet the caller and state that you can answer quick FAQs about the pre-approval program or route them to our loan specialist.
+- Never mention the name of the loan specialist, {LOAN_AGENT_NAME}, in your responses unless the caller indicates they want to begin the loan application pre-approval.
 - Answer only lightweight questions about hours, eligibility basics, or how pre-approval works. If unsure, say you'll connect them to the specialist.
 - Do NOT collect personal data or start the application yourself.
-- When the caller is ready for a pre-approval or asks for more detail, confirm briefly and say a natural phrase such as "I'll bring our loan specialist on now" and then pause so the system can transfer.
+- When the caller indicates they want to begin pre-approval immediately respond once with a short confirmation: "Connecting you to Blake, our loan specialist, now. Please hold." Do not ask for permission or follow-up questions—just acknowledge and let the system transfer.
 - Respond in the same language the caller uses. If you need to switch languages, ask for permission first.
 """.strip()
 
@@ -63,6 +64,7 @@ Human agent option:
 - Introduce yourself only once after the handoff. After that, proceed with the workflow unless the caller specifically asks for a reminder.
 - Keep answers focused and professional. Respond in the same language as the caller. Default to English unless the caller begins speaking in another language or explicitly requests a change.
 - Do not switch languages without explicit confirmation from the caller.
+- Respond with a single concise message per turn.
 """.strip()
 
 START_APPLICATION_PATTERNS = [
@@ -73,13 +75,8 @@ START_APPLICATION_PATTERNS = [
     r"\bproceed\s+with\s+(?:the\s+)?pre[-\s]?approval\b",
     r"(?:talk|speak)\s+to\s+(?:the\s+)?loan\s+specialist",
     r"(?:connect|transfer)\s+(?:me\s+)?(?:to\s+)?(?:the\s+)?loan\s+specialist",
+    r"(?:apply|application)\s+for\s+(?:a\s+)?loan",
 ]
-ASSISTANT_LOAN_HANDOFF_PATTERN = re.compile(
-    r"(?:transfer|connect|bring)\s+(?:you\s+)?(?:to\s+)?(?:our\s+)?(?:loan specialist|loan expert|"
-    + re.escape(LOAN_AGENT_NAME)
-    + r")",
-    re.IGNORECASE,
-)
 EMAIL_REGEX = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 ZIP_REGEX = re.compile(r"\b\d{5}\b")
 AFFIRMATIVE_PATTERN = re.compile(
@@ -270,8 +267,7 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
     # Monitor messages and send email when all data is collected
     email_sent_flag = False
     loan_flow_stage = None
-    last_stage_prompt = None
-    stage_prompt_history = {}
+    nudged_stages = set()
     pending_email_candidate = None
     loan_intro_noted = False
     last_invalid_email_attempt = None
@@ -281,7 +277,7 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
     support_phone_number = os.getenv("SUPPORT_PHONE_NUMBER")
     
     async def check_and_send_email():
-        nonlocal email_sent_flag, loan_flow_stage, last_stage_prompt
+        nonlocal email_sent_flag, loan_flow_stage
         if email_sent_flag:
             return
         
@@ -296,7 +292,6 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
             logger.info(f"Email sent to {collected_data['email']} for {collected_data['name']}, zip {collected_data['zip_code']}, Success: {success}")
             email_sent_flag = True
             loan_flow_stage = "completed"
-            last_stage_prompt = None
 
     pipeline = Pipeline(
         [
@@ -325,59 +320,22 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
 
     set_tts_voice(WELCOME_VOICE)
 
-    def stage_prompt_text(stage: str) -> str:
-        name = collected_data["name"]
-        if stage == "awaiting_name":
-            return (
-                "Say, matching the caller's language: \"To begin, may I have your full legal name?\""
-            )
-        if stage == "awaiting_email":
-            return (
-                (
-                    f"Say, matching the caller's language: \"Thanks {name}. Which email address should receive the secure application link?\""
-                )
-                if name
-                else "Say, matching the caller's language: \"Thanks. Which email address should receive the secure application link?\""
-            )
-        if stage == "awaiting_zip":
-            return "Say, matching the caller's language: \"Great, and finally, what is your current zip code?\""
-        if stage == "ready_to_send":
-            return (
-                "Say, matching the caller's language: \"Perfect. I'll send that secure application link now. Let me know if you need anything else while you're on the line.\""
-            )
-        if stage == "completed":
-            return (
-                "Say, matching the caller's language: \"The email is on its way. I'm happy to stay with you if you have any other questions.\""
-            )
-        return ""
+    NUDGE_MESSAGES = {
+        "awaiting_name": "Reminder: Confirm the caller's full legal name before proceeding.",
+        "awaiting_email": "Reminder: Confirm the caller's email address so you can send the secure application link.",
+        "awaiting_zip": "Reminder: Ask the caller for their current zip code before moving on.",
+        "ready_to_send": "All details collected. Confirm you're sending the secure application link and offer to stay on the line.",
+    }
 
-    async def prompt_stage(
-        stage: str,
-        custom_text: str | None = None,
-        *,
-        force: bool = False,
-        user_count: int = -1,
-    ):
-        nonlocal last_stage_prompt
-        last_seen_user_count = stage_prompt_history.get(stage, -1)
-        effective_user_count = user_count if user_count is not None else last_seen_user_count
-        if not force and effective_user_count <= last_seen_user_count:
+    async def nudge_stage(stage: str):
+        nonlocal nudged_stages
+        if stage in nudged_stages:
             return
-        prompt = custom_text or stage_prompt_text(stage)
-        if not prompt:
-            stage_prompt_history[stage] = effective_user_count
+        reminder = NUDGE_MESSAGES.get(stage)
+        if not reminder:
             return
-        signature = (stage, prompt)
-        if not force and last_stage_prompt == signature:
-            stage_prompt_history[stage] = effective_user_count
-            return
-        messages.append({"role": "system", "content": prompt})
-        sync_context()
-        await task.queue_frames([LLMMessagesFrame(list(messages))])
-        messages.pop()
-        sync_context()
-        last_stage_prompt = signature
-        stage_prompt_history[stage] = effective_user_count
+        nudged_stages.add(stage)
+        logger.debug(f"Nudge stage triggered for {stage}: {reminder}")
 
     def is_valid_email_address(value: str) -> bool:
         if not value or len(value) > 254:
@@ -400,7 +358,7 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
             pass
     
     async def switch_to_loan_agent():
-        nonlocal current_agent, collected_data, email_sent_flag, loan_flow_stage, last_stage_prompt, last_invalid_email_attempt, pending_email_candidate, loan_intro_noted
+        nonlocal current_agent, collected_data, email_sent_flag, loan_flow_stage, last_invalid_email_attempt, pending_email_candidate, loan_intro_noted
         if current_agent == "loan":
             return
         
@@ -409,7 +367,6 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
         collected_data = {"name": None, "email": None, "zip_code": None}
         email_sent_flag = False
         loan_flow_stage = "awaiting_name"
-        last_stage_prompt = None
         last_invalid_email_attempt = None
         pending_email_candidate = None
         loan_intro_noted = False
@@ -423,19 +380,17 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
         ]
         sync_context()
 
-        current_user_count = len(
-            [m for m in context.get_messages() if m.get("role") == "user"]
+        kickoff_prompt = (
+            "The caller has just been transferred to you from the welcome concierge and is ready to begin. "
+            "Immediately respond with one concise message that (1) confirms this is a soft credit inquiry with no impact on their score, "
+            "and (2) asks for their full legal name. Do not wait for additional user input before answering."
         )
-        intro_text = (
-            f"Say, matching the caller's language: \"Thanks for waiting. This is {LOAN_AGENT_NAME}, "
-            f"the loan specialist with {company_name}. To get started, may I have your full legal name?\""
-        )
-        await prompt_stage(
-            "awaiting_name",
-            custom_text=intro_text,
-            force=True,
-            user_count=current_user_count,
-        )
+        messages.append({"role": "system", "content": kickoff_prompt})
+        sync_context()
+        await task.queue_frames([LLMMessagesFrame(list(messages))])
+        messages.pop()
+        sync_context()
+        await nudge_stage("awaiting_name")
         if not loan_intro_noted:
             messages.append(
                 {
@@ -448,7 +403,7 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
     
     # Background task to check for collected data and human agent requests
     async def monitor_messages():
-        nonlocal call_forwarded_flag, current_agent, loan_flow_stage, last_stage_prompt, last_invalid_email_attempt, pending_email_candidate
+        nonlocal call_forwarded_flag, current_agent, loan_flow_stage, last_invalid_email_attempt, pending_email_candidate
         logger.info("Email monitor task started")
         while True:
             try:
@@ -503,7 +458,9 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
                         re.search(pattern, user_text, re.IGNORECASE)
                         for pattern in START_APPLICATION_PATTERNS
                     )
-                    assistant_handoff = ASSISTANT_LOAN_HANDOFF_PATTERN.search(latest_assistant_text)
+                    assistant_handoff = False
+                    if LOAN_AGENT_NAME.lower() in latest_assistant_text.lower():
+                        assistant_handoff = True
                     
                     if start_requested or assistant_handoff:
                         await switch_to_loan_agent()
@@ -532,16 +489,8 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
                             collected_data["name"] = name_match.group(0).strip()
                         logger.info(f"Extracted name: {collected_data['name']}")
                         loan_flow_stage = "awaiting_email"
-                        last_stage_prompt = None
-                        await prompt_stage(
-                            "awaiting_email",
-                            user_count=len(user_messages),
-                        )
                         continue
-                    await prompt_stage(
-                        "awaiting_name",
-                        user_count=len(user_messages),
-                    )
+                    await nudge_stage("awaiting_name")
                     continue
                 
                 if loan_flow_stage == "awaiting_email" and not collected_data["email"]:
@@ -554,22 +503,11 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
                             pending_email_candidate = None
                             last_invalid_email_attempt = None
                             loan_flow_stage = "awaiting_zip"
-                            last_stage_prompt = None
                             logger.info(f"Extracted email from user input: {collected_data['email']}")
-                            await prompt_stage(
-                                "awaiting_zip",
-                                user_count=len(user_messages),
-                            )
                             continue
                         if last_invalid_email_attempt != email_candidate_user:
                             last_invalid_email_attempt = email_candidate_user
-                            last_stage_prompt = None
-                            await prompt_stage(
-                                "awaiting_email",
-                                "Say: 'I want to be sure I captured that correctly. Could you please repeat the full email address, including the part after the at sign?'",
-                                force=True,
-                                user_count=len(user_messages),
-                            )
+                            await nudge_stage("awaiting_email")
                             continue
 
                     if assistant_email_candidate and is_valid_email_address(assistant_email_candidate):
@@ -584,27 +522,12 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
                         pending_email_candidate = None
                         last_invalid_email_attempt = None
                         loan_flow_stage = "awaiting_zip"
-                        last_stage_prompt = None
                         logger.info(f"Extracted email from assistant confirmation: {collected_data['email']}")
-                        await prompt_stage(
-                            "awaiting_zip",
-                            user_count=len(user_messages),
-                        )
                         continue
 
                     if re.search(r"\bsent\b.*email", assistant_text, re.IGNORECASE):
-                        last_stage_prompt = None
-                        await prompt_stage(
-                            "awaiting_email",
-                            "Say: 'Before I send anything, I still need your email address. Could you please share it now?'",
-                            force=True,
-                            user_count=len(user_messages),
-                        )
+                        await nudge_stage("awaiting_email")
                         continue
-                    await prompt_stage(
-                        "awaiting_email",
-                        user_count=len(user_messages),
-                    )
                     continue
                 
                 if loan_flow_stage == "awaiting_zip" and not collected_data["zip_code"]:
@@ -623,17 +546,9 @@ async def main(websocket_client, stream_sid, call_sid=None, company_name=None):
                         collected_data["zip_code"] = zip_value
                         logger.info(f"Extracted zip code: {collected_data['zip_code']}")
                         loan_flow_stage = "ready_to_send"
-                        last_stage_prompt = None
-                        await prompt_stage(
-                            "ready_to_send",
-                            user_count=len(user_messages),
-                        )
                         await check_and_send_email()
                         continue
-                    await prompt_stage(
-                        "awaiting_zip",
-                        user_count=len(user_messages),
-                    )
+                    await nudge_stage("awaiting_zip")
                     continue
                 
                 if loan_flow_stage == "ready_to_send":
