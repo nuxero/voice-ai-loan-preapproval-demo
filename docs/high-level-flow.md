@@ -178,7 +178,7 @@ The system enables customers to apply for loan pre-approval via voice call, with
 **Key Components**:
 - `bot.py::main()` - Pipeline initialization
 - Deepgram STT - Speech-to-text conversion
-- OpenAI GPT-4o - Conversation management
+- OpenAI GPT - Conversation management
 - OpenAI TTS - Text-to-speech synthesis
 - Silero VAD - Voice activity detection
 

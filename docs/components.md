@@ -63,9 +63,9 @@ WebSocket Input → STT → Context Aggregator (User) → LLM → TTS → WebSoc
 - **SileroVADAnalyzer**: Voice activity detection
 
 **Configuration**:
-- **STT Model**: `nova-2-general` (Deepgram)
-- **STT Language**: `multi` (multilingual)
-- **LLM Model**: `gpt-4o` (OpenAI)
+- **STT Model**: `nova-2` (Deepgram)
+- **STT Language**: `en-US` (English)
+- **LLM Model**: `gpt-4.1-mini` (OpenAI)
 - **TTS Voices**: `ballad` (welcome concierge), `alloy` (loan specialist) via OpenAI TTS
 
 **System Prompt**:
@@ -83,7 +83,7 @@ The LLM follows a structured workflow:
 - pipecat-ai (API Reference: https://reference-server.pipecat.ai/en/latest/)
 - twilio
 - openai
-- deepgram (via pipecat)
+- deepgram
 
 ---
 
@@ -190,8 +190,8 @@ The LLM follows a structured workflow:
 
 **Configuration**:
 - API Key: `DEEPGRAM_API_KEY` environment variable
-- Model: `nova-2-general`
-- Language: `multi` (multilingual support)
+- Model: `nova-2`
+- Language: `en-US` (english only for now)
 
 **Integration**: Via Pipecat `DeepgramSTTService`
 
@@ -210,7 +210,7 @@ The LLM follows a structured workflow:
 
 **Configuration**:
 - API Key: `OPENAI_API_KEY` environment variable
-- Model: `gpt-4o`
+- Model: `gpt-4.1-mini`
 
 **Integration**: Via Pipecat `OpenAILLMService`
 

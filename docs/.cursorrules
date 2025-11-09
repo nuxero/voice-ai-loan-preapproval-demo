@@ -2,7 +2,7 @@
 
 ## Project Flow (Critical)
 1. Twilio call → POST / → TwiML with WebSocket URL
-2. WebSocket /ws → Pipecat pipeline (Deepgram STT → OpenAI LLM → ElevenLabs TTS)
+2. WebSocket /ws → Pipecat pipeline (Deepgram STT → OpenAI LLM → OpenAI TTS)
 3. Agent collects: name, phone, zip_code (in order)
 4. Generate secure link → Send via SMS/Email
 5. User completes form → POST /loan-application

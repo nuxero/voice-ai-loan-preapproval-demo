@@ -21,8 +21,8 @@ For comprehensive architecture, API reference, and integration documentation, se
   - Sends secure link to complete application
 - **Web-based loan application form** with pre-filled data from voice call
 - **Speech-to-Text** using Deepgram for accurate transcription
-- **AI-powered conversation** with OpenAI GPT-4o for natural dialogue
-- **Text-to-Speech** using OpenAI TTS voices (ballad + alloy) for natural dialogue
+- **AI-powered conversation** with OpenAI GPT for natural dialogue
+- **Text-to-Speech** using OpenAI TTS voices for natural dialogue
 - **Dynamic WebSocket URL generation** for different deployment environments
 
 ## Architecture

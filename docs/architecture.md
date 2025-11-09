@@ -55,7 +55,7 @@ Twilio Call → FastAPI (POST /) → WebSocket (/ws) → Pipecat Pipeline
 - **Pipecat** - Audio pipeline ([API Reference](https://reference-server.pipecat.ai/en/latest/))
 - **Twilio** - Call webhooks, audio streaming
 - **Deepgram** - Speech-to-Text
-- **OpenAI GPT-4o** - Conversational AI
+- **OpenAI GPT** - Conversational AI
 - **OpenAI TTS** - Text-to-Speech
 - **MailerSend** - Email delivery
 - **DecisionRules** - Business rules engine ([Documentation](https://docs.decisionrules.io/doc))
