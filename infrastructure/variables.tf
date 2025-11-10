@@ -51,8 +51,32 @@ variable "mailersend_api_key" {
   default     = ""
 }
 
-variable "mailersend_from_url" {
+variable "mailersend_from_email" {
   description = "Mailersend from url"
+  type        = string
+  default     = ""
+}
+
+variable "decisionrules_solver_key" {
+  description = "DecisionRules solver key"
+  type        = string
+  default     = ""
+}
+
+variable "decisionrules_host" {
+  description = "DecisionRules host"
+  type        = string
+  default     = ""
+}
+
+variable "decisionrules_rule_alias" {
+  description = "DecisionRules rule alias"
+  type        = string
+  default     = ""
+}
+
+variable "decisionrules_rule_id" {
+  description = "DecisionRules rule id"
   type        = string
   default     = ""
 }

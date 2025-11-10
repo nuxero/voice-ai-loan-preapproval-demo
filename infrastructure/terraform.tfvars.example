@@ -13,4 +13,9 @@ custom_domain       = "yourdomain.example.com"
 
 # Mailer send
 mailersend_api_key  = "your-mailersend-api-key"
-mailersend_from_url = "your-mailersend-from-url"
+mailersend_from_email = "your-mailersend-from-url"
+
+decisionrules_solver_key  = ""
+decisionrules_host        = ""
+decisionrules_rule_alias  = ""
+decisionrules_rule_id     = ""

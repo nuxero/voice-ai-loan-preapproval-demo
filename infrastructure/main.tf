@@ -146,7 +146,11 @@ resource "aws_secretsmanager_secret_version" "api_keys" {
     TWILIO_ACCOUNT_SID  = var.twilio_account_sid
     TWILIO_AUTH_TOKEN   = var.twilio_auth_token
     MAILERSEND_API_KEY  = var.mailersend_api_key
-    MAILERSEND_FROM_URL = var.mailersend_from_url
+    MAILERSEND_FROM_EMAIL = var.mailersend_from_email
+    DECISIONRULES_SOLVER_KEY = var.decisionrules_solver_key
+    DECISIONRULES_HOST       = var.decisionrules_host
+    DECISIONRULES_RULE_ALIAS = var.decisionrules_rule_alias
+    DECISIONRULES_RULE_ID    = var.decisionrules_rule_id
   })
 }
 

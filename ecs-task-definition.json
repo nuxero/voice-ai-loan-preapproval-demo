@@ -15,6 +15,20 @@
           "protocol": "tcp"
         }
       ],
+      "environment": [
+        {
+          "name": "BASE_URL",
+          "value": "https://loan-preapproval.agilityfeat.com"
+        },
+        {
+          "name": "SUPPORT_PHONE_NUMBER",
+          "value": "8042221111"
+        },
+        {
+          "name": "COMPANY_NAME", 
+          "value": "Agilityfeat lending"
+        }
+      ],
       "secrets": [
         {
           "name": "ELEVENLABS_API_KEY",
@@ -41,8 +55,24 @@
           "valueFrom": "${SECRETS_ARN}:MAILERSEND_API_KEY::"
         },
         {
-          "name": "MAILERSEND_FROM_URL",
-          "valueFrom": "${SECRETS_ARN}:MAILERSEND_FROM_URL::"
+          "name": "MAILERSEND_FROM_EMAIL",
+          "valueFrom": "${SECRETS_ARN}:MAILERSEND_FROM_EMAIL::"
+        },
+        {
+          "name": "DECISIONRULES_SOLVER_KEY",
+          "valueFrom": "${SECRETS_ARN}:DECISIONRULES_SOLVER_KEY::"
+        },
+        {
+          "name": "DECISIONRULES_HOST",
+          "valueFrom": "${SECRETS_ARN}:DECISIONRULES_HOST::"
+        },
+        {
+          "name": "DECISIONRULES_RULE_ALIAS",
+          "valueFrom": "${SECRETS_ARN}:DECISIONRULES_RULE_ALIAS::"
+        },
+        {
+          "name": "DECISIONRULES_RULE_ID",
+          "valueFrom": "${SECRETS_ARN}:DECISIONRULES_RULE_ID::"
         }
       ],
       "logConfiguration": {
