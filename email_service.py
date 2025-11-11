@@ -241,7 +241,7 @@ If you have any questions, please contact our support team.
             logger.error("Cannot send email: MAILERSEND_API_KEY not configured")
             return False
         
-        subject = "Congratulations! Your Loan Has Been Pre-Approved"
+        subject = "Loan Pre-Approval Update"
         
         html_content = f"""
         <html>
@@ -267,29 +267,31 @@ If you have any questions, please contact our support team.
         </head>
         <body>
             <div class="container">
-                <h2>Congratulations, {name}!</h2>
-                <p>Great news! Your loan application has been pre-approved.</p>
-                <p><strong>Pre-Approved Amount:</strong></p>
+                <h2>Hi {name},</h2>
+                <p>We reviewed your loan application and completed the initial assessment.</p>
+                <p><strong>Approved Amount:</strong></p>
                 <div class="amount">${approval_amount:,.2f}</div>
                 {f'<p><strong>Application ID:</strong> {application_id}</p>' if application_id else ''}
-                <p>Our team will contact you shortly to discuss next steps and finalize your loan.</p>
-                <p>Thank you for choosing our loan pre-approval service.</p>
+                <p>Our lending team will reach out to confirm a few details and guide you through final approval.</p>
+                <p>If you have questions in the meantime, reply to this email or call us at (555) 010-0000.</p>
+                <p>Thank you for working with us.</p>
             </div>
         </body>
         </html>
         """
         
         plain_text_content = f"""
-Congratulations, {name}!
+Hi {name},
 
-Great news! Your loan application has been pre-approved.
+We reviewed your loan application and completed the initial assessment.
 
 Pre-Approved Amount: ${approval_amount:,.2f}
 {f'Application ID: {application_id}' if application_id else ''}
 
-Our team will contact you shortly to discuss next steps and finalize your loan.
+Our lending team will reach out to confirm a few details and guide you through final approval.
+If you have questions in the meantime, reply to this email or call us at (555) 010-0000.
 
-Thank you for choosing our loan pre-approval service.
+Thank you for working with us.
         """
         
         return await self._send_email(

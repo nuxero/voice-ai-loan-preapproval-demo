@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import aiohttp
 from dotenv import load_dotenv
@@ -108,43 +108,84 @@ async def loan_application_form(
 def _extract_decision_outcome(payload: Any) -> Tuple[Optional[str], Optional[str]]:
     """
     Attempt to extract a decision outcome and optional reason from a DecisionRules response.
-    This utility is defensive and will try multiple common keys to find usable values.
+    This utility is defensive and works even when multiple decision objects are returned.
+    Denials take priority over approvals, which take priority over manual reviews.
     """
-    if payload is None:
-        return None, None
 
-    if isinstance(payload, dict):
-        for decision_key in ("decision", "result", "status", "outcome", "approved"):
-            value = payload.get(decision_key)
-            if isinstance(value, str):
-                reason = (
-                    payload.get("reason")
-                    or payload.get("explanation")
-                    or payload.get("details")
-                )
-                if isinstance(reason, dict):
-                    reason = json.dumps(reason)
-                elif reason is not None:
-                    reason = str(reason)
-                return value, reason
+    def _collect_decisions(node: Any) -> List[Tuple[str, Optional[str]]]:
+        collected: List[Tuple[str, Optional[str]]] = []
 
-        for nested_key in ("outputs", "result", "results", "data"):
-            nested = payload.get(nested_key)
-            if nested is not None:
-                decision, reason = _extract_decision_outcome(nested)
-                if decision:
-                    return decision, reason
+        if node is None:
+            return collected
 
-    if isinstance(payload, list):
-        for item in payload:
-            decision, reason = _extract_decision_outcome(item)
-            if decision:
-                return decision, reason
+        if isinstance(node, dict):
+            for decision_key in ("decision", "result", "status", "outcome", "approved"):
+                value = node.get(decision_key)
+                if isinstance(value, str):
+                    reason_value = (
+                        node.get("reason")
+                        or node.get("explanation")
+                        or node.get("details")
+                    )
+                    if isinstance(reason_value, dict):
+                        reason_value = json.dumps(reason_value)
+                    elif reason_value is not None:
+                        reason_value = str(reason_value)
+                    collected.append((value, reason_value))
 
-    if isinstance(payload, str):
-        return payload, None
+            for nested_key in ("outputs", "result", "results", "data"):
+                nested = node.get(nested_key)
+                if nested is not None:
+                    collected.extend(_collect_decisions(nested))
+            return collected
 
-    return None, None
+        if isinstance(node, list):
+            for item in node:
+                collected.extend(_collect_decisions(item))
+            return collected
+
+        if isinstance(node, str):
+            collected.append((node, None))
+
+        return collected
+
+    def _choose_preferred(decisions: List[Tuple[str, Optional[str]]]) -> Tuple[Optional[str], Optional[str]]:
+        if not decisions:
+            return None, None
+
+        def _normalize(text: str) -> str:
+            return text.lower().strip()
+
+        def _matches_any(text: str, keywords: Tuple[str, ...]) -> bool:
+            normalized = _normalize(text)
+            return any(keyword in normalized for keyword in keywords)
+
+        def _merge_reasons(items: List[Tuple[str, Optional[str]]]) -> Optional[str]:
+            reasons = [reason for _, reason in items if reason]
+            if not reasons:
+                return items[0][1]
+            unique_reasons = list(dict.fromkeys(reasons))
+            return "; ".join(unique_reasons)
+
+        priority_groups = [
+            ("deny", "declin", "reject"),
+            ("approve", "yes", "true"),
+            ("review", "manual"),
+        ]
+
+        for keywords in priority_groups:
+            matches = [
+                (decision, reason)
+                for decision, reason in decisions
+                if _matches_any(decision, keywords)
+            ]
+            if matches:
+                return matches[0][0], _merge_reasons(matches)
+
+        return decisions[0]
+
+    decisions = _collect_decisions(payload)
+    return _choose_preferred(decisions)
 
 
 async def _fetch_mock_credit_score(legal_name: str, ssn_last4: str) -> dict:
@@ -176,6 +217,7 @@ async def submit_loan_application(
     ssn_last4: str = Form(...),
     monthly_income: float = Form(...),
     requested_amount: float = Form(...),
+    loan_duration_years: int = Form(...),
     purpose_of_loan: str = Form(...),
     terms_consent: Optional[str] = Form(None),
 ):
@@ -195,12 +237,24 @@ async def submit_loan_application(
             },
             "loan_details": {
                 "requested_amount": requested_amount,
+                "loan_duration_years": loan_duration_years,
                 "purpose_of_loan": purpose_of_loan,
             },
             "consents": {
                 "terms": terms_consent is not None,
             },
         }
+
+        total_months = max(loan_duration_years * 12, 1)
+        estimated_monthly_payment = round(requested_amount / total_months, 2)
+        debt_to_income_ratio = (
+            round(estimated_monthly_payment / monthly_income, 2)
+            if monthly_income
+            else None
+        )
+
+        application_data["loan_details"]["estimated_monthly_payment"] = estimated_monthly_payment
+        application_data["loan_details"]["debt_to_income_ratio"] = debt_to_income_ratio
         
         # Log the application (in production, you'd save this to a database)
         logger.info(f"Loan application submitted: {legal_name} ({email})")
@@ -234,9 +288,11 @@ async def submit_loan_application(
             "ApplicantEmail": email,
             "MonthlyIncome": monthly_income,
             "RequestedAmount": requested_amount,
+            "LoanDurationYears": loan_duration_years,
+            "EstimatedMonthlyPayment": estimated_monthly_payment,
             "PurposeOfLoan": purpose_of_loan,
             "ConsentGiven": terms_consent is not None,
-            "DebtToIncomeRatio": round(requested_amount / monthly_income, 2) if monthly_income else None,
+            "DebtToIncomeRatio": debt_to_income_ratio,
             "CreditScore": credit_score,
         }
 
