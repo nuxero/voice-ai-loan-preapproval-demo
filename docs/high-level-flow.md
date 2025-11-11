@@ -37,7 +37,7 @@ The system enables customers to apply for loan pre-approval via voice call, with
    │
    │ Collects in order:
    │ 1. Full name (legal name)
-   │ 2. Mobile number (for secure link)
+   │ 2. Email (for secure link). In the future could potentially handle numbers to send via SMS.
    │ 3. Zip code
    │
    │ LLM extracts and validates information
@@ -46,7 +46,7 @@ The system enables customers to apply for loan pre-approval via voice call, with
 5. SECURE LINK GENERATION
    │
    │ System generates secure application link with:
-   │ - Pre-filled parameters (name, phone, zip_code)
+   │ - Pre-filled parameters (name, email, zip_code)
    │ - Secure token/session identifier
    │
    ▼
@@ -63,7 +63,7 @@ The system enables customers to apply for loan pre-approval via voice call, with
    │ User clicks link → Opens loan application form
    │ Form pre-filled with:
    │ - legal_name
-   │ - phone
+   │ - email or phone
    │ - zip_code
    │
    ▼
