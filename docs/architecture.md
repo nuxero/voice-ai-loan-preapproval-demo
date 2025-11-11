@@ -9,7 +9,7 @@ Voice-enabled loan pre-approval system: FastAPI + Pipecat processes voice calls,
 ```
 Twilio Call → FastAPI (POST /) → WebSocket (/ws) → Pipecat Pipeline
                                                           ↓
-                                    STT (Deepgram) → LLM (OpenAI) → TTS (OpenAI)
+                                    STT (Deepgram) → LLM (OpenAI) → TTS (Cartesia)
                                                           ↓
                                     Data Collection → Email Link (MailerSend) → Form Submission
                                                           ↓
@@ -56,7 +56,7 @@ Twilio Call → FastAPI (POST /) → WebSocket (/ws) → Pipecat Pipeline
 - **Twilio** - Call webhooks, audio streaming
 - **Deepgram** - Speech-to-Text
 - **OpenAI GPT** - Conversational AI
-- **OpenAI TTS** - Text-to-Speech
+- **Cartesia TTS** - Text-to-Speech
 - **MailerSend** - Email delivery
 - **DecisionRules** - Business rules engine ([Documentation](https://docs.decisionrules.io/doc))
 

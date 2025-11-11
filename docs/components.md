@@ -59,14 +59,14 @@ WebSocket Input → STT → Context Aggregator (User) → LLM → TTS → WebSoc
 - **DeepgramSTTService**: Speech-to-text service
 - **OpenAILLMService**: Language model for conversation
 - **OpenAILLMContext**: Conversation context management
-- **OpenAITTSService**: Text-to-speech service
+- **CartesiaTTSService**: Text-to-speech service
 - **SileroVADAnalyzer**: Voice activity detection
 
 **Configuration**:
 - **STT Model**: `nova-2` (Deepgram)
 - **STT Language**: `en-US` (English)
 - **LLM Model**: `gpt-4.1-mini` (OpenAI)
-- **TTS Voices**: `ballad` (welcome concierge), `alloy` (loan specialist) via OpenAI TTS
+- **TTS Voices**: Cartesia voice IDs configured via `CARTESIA_WELCOME_VOICE_ID` and `CARTESIA_LOAN_VOICE_ID`
 
 **System Prompt**:
 The LLM follows a structured workflow:
@@ -227,21 +227,21 @@ The LLM follows a structured workflow:
 
 ---
 
-### 9. OpenAI TTS Integration
+### 9. Cartesia TTS Integration
 
-**Purpose**: Text-to-speech synthesis for voice responses
+**Purpose**: Text-to-speech synthesis for voice responses (primary)
 
-**Service**: OpenAI Text-to-Speech API (via Pipecat)
+**Service**: Cartesia Sonic TTS (via Pipecat)
 
 **Configuration**:
-- API Key: `OPENAI_API_KEY` environment variable
-- Voices: `ballad` (welcome concierge) and `alloy` (loan specialist)
+- API Key: `CARTESIA_API_KEY` environment variable
+- Voices: `CARTESIA_WELCOME_VOICE_ID`, `CARTESIA_LOAN_VOICE_ID`
 
-**Integration**: Via Pipecat `OpenAITTSService`
+**Integration**: Via Pipecat `CartesiaTTSService`
 
 **Processing**:
 - Receives text from LLM
-- Converts to natural-sounding speech with the configured voice
+- Converts to natural-sounding speech with the configured voice via Cartesia streaming WebSocket
 - Streams audio to WebSocket for Twilio
 
 ---

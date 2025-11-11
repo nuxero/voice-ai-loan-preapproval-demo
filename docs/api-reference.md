@@ -294,7 +294,7 @@ curl -X POST https://your-domain.com/loan-application \
 
 **Generation**:
 - LLM generates text response
-- OpenAI TTS converts to speech
+- Cartesia TTS converts to speech
 - Audio sent via WebSocket to Twilio
 
 ---

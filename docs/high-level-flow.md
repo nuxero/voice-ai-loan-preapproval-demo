@@ -179,7 +179,7 @@ The system enables customers to apply for loan pre-approval via voice call, with
 - `bot.py::main()` - Pipeline initialization
 - Deepgram STT - Speech-to-text conversion
 - OpenAI GPT - Conversation management
-- OpenAI TTS - Text-to-speech synthesis
+- Cartesia TTS - Text-to-speech synthesis
 - Silero VAD - Voice activity detection
 
 **LLM System Prompt**:
@@ -384,7 +384,7 @@ result = solver.solve(
 1. **Twilio** → Voice calls (webhooks and audio streaming)
 2. **Deepgram** → Speech-to-text
 3. **OpenAI** → Conversation AI
-4. **OpenAI TTS** → Text-to-speech
+4. **Cartesia TTS** → Text-to-speech
 5. **DecisionRules** → Business rules evaluation
 6. **MailerSend** → Email delivery for application links
 7. **Credit Score Service** → Credit check (dummy)

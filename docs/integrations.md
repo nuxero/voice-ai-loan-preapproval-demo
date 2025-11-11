@@ -66,7 +66,7 @@ TWILIO_AUTH_TOKEN=your_auth_token_here
 
 ### Purpose
 - Real-time voice processing pipeline
-- Orchestrates STT (Deepgram) → LLM (OpenAI) → TTS (OpenAI)
+- Orchestrates STT (Deepgram) → LLM (OpenAI) → TTS (Cartesia)
 
 ### Service Details
 - **Framework**: Pipecat
@@ -79,9 +79,9 @@ WebSocket Input → STT → LLM → TTS → WebSocket Output
 ```
 
 ### Services Used
-- **Deepgram STT**: Speech-to-text (`nova-2-general` model)
-- **OpenAI GPT-4o**: Conversational AI
-- **OpenAI TTS**: Text-to-speech (`ballad`, `alloy`)
+- **Deepgram STT**: Speech-to-text (`nova-2` model)
+- **OpenAI GPT-4.1 Mini**: Conversational AI
+- **Cartesia TTS**: Text-to-speech (`sonic` models)
 
 ### Configuration
 
@@ -89,30 +89,34 @@ WebSocket Input → STT → LLM → TTS → WebSocket Output
 ```bash
 DEEPGRAM_API_KEY=your_deepgram_api_key
 OPENAI_API_KEY=sk-...
+CARTESIA_API_KEY=your_cartesia_api_key
+CARTESIA_WELCOME_VOICE_ID=cartesia_voice_id_for_welcome_agent
+CARTESIA_LOAN_VOICE_ID=cartesia_voice_id_for_loan_agent  # optional; falls back to welcome voice
 ```
 
 ### Implementation
 
 **Pipeline Setup** (`bot.py`):
 ```python
-from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.openai.tts import OpenAITTSService
+from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.transports.network.fastapi_websocket import FastAPIWebsocketTransport
 
 # STT
 stt = DeepgramSTTService(
     api_key=os.getenv("DEEPGRAM_API_KEY"),
-    live_options=LiveOptions(model="nova-2-general", language="multi")
+    live_options=LiveOptions(model="nova-2", language="en-US")
 )
 
 # LLM
-llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"), model="gpt-4o")
+llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"), model="gpt-4.1-mini")
 
-# TTS
-tts = OpenAITTSService(
-    api_key=os.getenv("OPENAI_API_KEY"),
-    voice="ballad",
+# TTS (Cartesia)
+tts = CartesiaTTSService(
+    api_key=os.getenv("CARTESIA_API_KEY"),
+    voice_id=os.getenv("CARTESIA_WELCOME_VOICE_ID"),
+    model=os.getenv("CARTESIA_MODEL", "sonic-3"),
 )
 
 # Pipeline
